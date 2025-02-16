@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Spotify Playlist Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            background-color: #121212;
+            color: #ffffff;
+        }
+
+        .sidebar {
+            width: 200px;
+            background-color: #000000;
+            padding: 15px;
+            height: 100vh;
+        }
+
+        .sidebar a {
+            color: #b3b3b3;
+            text-decoration: none;
+            display: block;
+            padding: 10px;
+            margin: 5px 0;
+            transition: color 0.3s;
+        }
+
+        .sidebar a:hover {
+            color: #ffffff;
+        }
+
+        .content {
+            flex: 1;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #b3b3b3;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            background-color: #282828;
+            border: 1px solid #404040;
+            color: #ffffff;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #1db954;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background-color: #1db954;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #1ed760;
+        }
+
+        .btn-login {
+            background-color: #1db954;
+            display: inline-block;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .playlist-container {
+            margin-top: 30px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .spotify-embed {
+            border-radius: 8px;
+            background-color: #282828;
+            width: 100%;
+            height: 380px;
+            border: none;
+        }
+
+        .login-message {
+            text-align: center;
+            margin: 40px 0;
+        }
+
+        #error-message {
+            color: #ff5555;
+            margin-top: 10px;
+        }
+
+        #loading-message {
+            color: #1db954;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <a href="/">Home</a>
+        {% if logged_in %}
+        <a href="/logout">Logout</a>
+        {% else %}
+        <a href="/login">Login with Spotify</a>
+        {% endif %}
+    </div>
+
+    <div class="content">
+        <h1>AI Spotify Playlist Generator</h1>
+        
+        {% if not logged_in %}
+        <div class="login-message">
+            <p>Please log in with Spotify to create personalized playlists</p>
+            <a href="/login" class="btn btn-login">Login with Spotify</a>
+        </div>
+        {% else %}
+        <form id="playlistForm">
+            <div class="form-group">
+                <label for="mood">Mood:</label>
+                <input type="text" id="mood" name="mood" placeholder="e.g., Happy, Sad, Energetic" required>
+            </div>
+
+            <div class="form-group">
+                <label for="genre">Genre:</label>
+                <select id="genre" name="genre">
+                    <option value="pop">Pop</option>
+                    <option value="rock">Rock</option>
+                    <option value="jazz">Jazz</option>
+                    <option value="classical">Classical</option>
+                    <option value="hiphop">Hip Hop</option>
+                    <option value="electronic">Electronic</option>
+                    <option value="country">Country</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="artist">Favorite Artist:</label>
+                <input type="text" id="artist" name="artist" placeholder="Enter artist name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="numSongs">Number of Songs:</label>
+                <input type="number" id="numSongs" name="numSongs" min="1" max="20" value="10" required>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn">Generate Playlist</button>
+            </div>
+        </form>
+
+        <div id="error-message"></div>
+        <div id="loading-message"></div>
+        <div id="playlist-container" class="playlist-container"></div>
+        {% endif %}
+    </div>
+
+    <script>
+        document.getElementById('playlistForm')?.addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const mood = document.getElementById('mood').value;
+            const genre = document.getElementById('genre').value;
+            const artist = document.getElementById('artist').value;
+            const numSongs = document.getElementById('numSongs').value;
+
+            const userInput = {
+                mood: mood,
+                genre: genre,
+                artist: artist,
+                numSongs: parseInt(numSongs)
+            };
+
+            // Show loading state
+            document.querySelector('button[type="submit"]').disabled = true;
+            document.querySelector('button[type="submit"]').textContent = 'Generating...';
+            document.getElementById('loading-message').textContent = 'Generating your playlist...';
+            document.getElementById('error-message').textContent = '';
+            document.getElementById('playlist-container').innerHTML = '';
+
+            fetch('/get_playlist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    user_input: userInput,
+                    mood: mood
+                }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Create and embed the Spotify playlist
+                const playlistContainer = document.getElementById('playlist-container');
+                playlistContainer.innerHTML = `
+                    <iframe 
+                        class="spotify-embed"
+                        src="${data.embed_url}"
+                        frameborder="0" 
+                        allowtransparency="true" 
+                        allow="encrypted-media">
+                    </iframe>
+                `;
+                
+                document.getElementById('error-message').textContent = '';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('error-message').textContent = error.message || "An error occurred while generating the playlist.";
+            })
+            .finally(() => {
+                // Reset button state
+                document.querySelector('button[type="submit"]').disabled = false;
+                document.querySelector('button[type="submit"]').textContent = 'Generate Playlist';
+                document.getElementById('loading-message').textContent = '';
+            });
+        });
+    </script>
+</body>
+</html>
